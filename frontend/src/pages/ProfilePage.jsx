@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { Camera, Mail, User } from "lucide-react";
+import toast from "react-hot-toast";
+
+const MAX_FILE_SIZE_MB = 7;
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
@@ -10,10 +13,14 @@ const ProfilePage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.error(`Image must be smaller than ${MAX_FILE_SIZE_MB}MB`);
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
-
     reader.readAsDataURL(file);
-
     reader.onload = async () => {
       const base64Image = reader.result;
       setSelectedImg(base64Image);
