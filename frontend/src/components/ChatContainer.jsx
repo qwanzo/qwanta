@@ -174,30 +174,28 @@ const ChatContainer = () => {
                 )}
 
                 <div className="flex gap-2 items-end group/message">
-                  {message.senderId !== authUser._id && (
-                    <div
-                      className="relative opacity-0 group-hover/message:opacity-100 transition-opacity"
+                  <div
+                    className="relative opacity-0 group-hover/message:opacity-100 transition-opacity"
+                  >
+                    <button
+                      className="btn btn-xs btn-ghost"
+                      onClick={() =>
+                        setActiveMessageMenu(
+                          activeMessageMenu === message._id ? null : message._id
+                        )
+                      }
                     >
-                      <button
-                        className="btn btn-xs btn-ghost"
-                        onClick={() =>
-                          setActiveMessageMenu(
-                            activeMessageMenu === message._id ? null : message._id
-                          )
-                        }
-                      >
-                        <MoreVertical size={14} />
-                      </button>
-                      {activeMessageMenu === message._id && (
-                        <div className="absolute bottom-full right-0 mb-2 z-50">
-                          <MessageActions
-                            message={message}
-                            onClose={() => setActiveMessageMenu(null)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
+                      <MoreVertical size={14} />
+                    </button>
+                    {activeMessageMenu === message._id && (
+                      <div className="absolute bottom-full right-0 mb-2 z-50">
+                        <MessageActions
+                          message={message}
+                          onClose={() => setActiveMessageMenu(null)}
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   <div>
                     <div
