@@ -9,14 +9,17 @@ import ProfilePage from "./pages/ProfilePage";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "./store/useAuthStore";
 import { useThemeStore } from "./store/useThemeStore";
+import { useErrorStore } from "./store/useErrorStore";
 import { useEffect } from "react";
 
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
+import ErrorModal from "./components/ErrorModal";
 
 const App = () => {
   const { authUser, checkAuth, isCheckingAuth, onlineUsers } = useAuthStore();
   const { theme } = useThemeStore();
+  const { currentError, clearError, retryCurrentError } = useErrorStore();
 
   console.log({ onlineUsers });
 
@@ -52,6 +55,12 @@ const App = () => {
       </Routes>
 
       <Toaster />
+
+      <ErrorModal
+        error={currentError?.error}
+        onClose={clearError}
+        onRetry={currentError?.onRetry ? retryCurrentError : null}
+      />
     </div>
   );
 };

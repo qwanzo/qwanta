@@ -22,6 +22,7 @@ import {
   clearChatHistory,
   updateTheme,
   setChatBackground,
+  exportChat,
 } from "../controllers/message.controller.js";
 
 const router = express.Router();
@@ -52,6 +53,9 @@ router.patch("/archive/:userId", protectRoute, toggleArchiveChat);
 router.patch("/pin/:userId", protectRoute, togglePinChat);
 router.patch("/mute/:userId", protectRoute, toggleMuteChat);
 router.delete("/clear/:userId", protectRoute, clearChatHistory);
+
+// Chat export
+router.get("/export/:userId", protectRoute, exportChat);
 
 // User preferences
 router.patch("/theme/update", protectRoute, updateTheme);

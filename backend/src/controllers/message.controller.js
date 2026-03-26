@@ -722,3 +722,175 @@ export const setChatBackground = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// Export chat history
+export const exportChat = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { format = 'json', includeDeleted = false } = req.query;
+    const loggedInUserId = req.user._id;
+
+    // Verify the user is part of this chat
+    if (loggedInUserId.toString() !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: "You can only export your own chats" });
+    }
+
+    // Get all messages between these users
+    const messages = await Message.find({
+      $or: [
+        { senderId: loggedInUserId, receiverId: userId },
+        { senderId: userId, receiverId: loggedInUserId },
+      ],
+      ...(includeDeleted ? {} : { isDeleted: false }),
+    })
+      .sort({ createdAt: 1 })
+      .populate("senderId", "fullName email")
+      .populate("receiverId", "fullName email")
+      .populate("replyTo", "text senderId")
+      .populate("forwardedFrom", "text senderId");
+
+    // Get user info for the chat
+    const chatUser = await User.findById(userId).select("fullName email");
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      chatWith: {
+        id: chatUser._id,
+        name: chatUser.fullName,
+        email: chatUser.email,
+      },
+      totalMessages: messages.length,
+      messages: messages.map(msg => ({
+        id: msg._id,
+        timestamp: msg.createdAt,
+        sender: {
+          id: msg.senderId._id,
+          name: msg.senderId.fullName,
+          email: msg.senderId.email,
+        },
+        text: msg.text,
+        image: msg.image,
+        file: msg.file,
+        isEdited: msg.isEdited,
+        editedAt: msg.editedAt,
+        editHistory: msg.editHistory,
+        isDeleted: msg.isDeleted,
+        deletedAt: msg.deletedAt,
+        isPinned: msg.isPinned,
+        pinnedAt: msg.pinnedAt,
+        reactions: Object.fromEntries(msg.reactions),
+        replyTo: msg.replyTo ? {
+          id: msg.replyTo._id,
+          text: msg.replyTo.text,
+          sender: msg.replyTo.senderId?.fullName,
+        } : null,
+        forwardedFrom: msg.forwardedFrom ? {
+          id: msg.forwardedFrom._id,
+          text: msg.forwardedFrom.text,
+          sender: msg.forwardedFrom.senderId?.fullName,
+        } : null,
+        isRead: msg.isRead,
+        readAt: msg.readAt,
+      })),
+    };
+
+    // Format the response based on requested format
+    if (format === 'text') {
+      const textContent = formatChatAsText(exportData);
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="chat-${chatUser.fullName.replace(/\s+/g, '_')}.txt"`);
+      return res.send(textContent);
+    }
+
+    if (format === 'csv') {
+      const csvContent = formatChatAsCSV(exportData);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="chat-${chatUser.fullName.replace(/\s+/g, '_')}.csv"`);
+      return res.send(csvContent);
+    }
+
+    // Default JSON format
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="chat-${chatUser.fullName.replace(/\s+/g, '_')}.json"`);
+    res.json(exportData);
+
+  } catch (error) {
+    console.log("Error in exportChat: ", error.message);
+    res.status(500).json({ error: "Failed to export chat" });
+  }
+};
+
+// Helper function to format chat as text
+function formatChatAsText(data) {
+  let text = `Chat Export - ${data.chatWith.name}\n`;
+  text += `Exported on: ${new Date(data.exportedAt).toLocaleString()}\n`;
+  text += `Total messages: ${data.totalMessages}\n\n`;
+  text += '='.repeat(50) + '\n\n';
+
+  data.messages.forEach(msg => {
+    const timestamp = new Date(msg.timestamp).toLocaleString();
+    const sender = msg.sender.name;
+    const isEdited = msg.isEdited ? ' (edited)' : '';
+    const isDeleted = msg.isDeleted ? ' (deleted)' : '';
+
+    text += `[${timestamp}] ${sender}${isEdited}${isDeleted}:\n`;
+
+    if (msg.text) {
+      text += `${msg.text}\n`;
+    }
+
+    if (msg.image) {
+      text += `[Image: ${msg.image}]\n`;
+    }
+
+    if (msg.file) {
+      text += `[File: ${msg.file.name} (${msg.file.size} bytes)]\n`;
+    }
+
+    if (msg.replyTo) {
+      text += `↳ Replying to: "${msg.replyTo.text}"\n`;
+    }
+
+    if (msg.forwardedFrom) {
+      text += `↳ Forwarded from: ${msg.forwardedFrom.sender}\n`;
+    }
+
+    if (msg.reactions && Object.keys(msg.reactions).length > 0) {
+      const reactions = Object.entries(msg.reactions)
+        .map(([emoji, users]) => `${emoji}(${users.length})`)
+        .join(' ');
+      text += `Reactions: ${reactions}\n`;
+    }
+
+    if (msg.isPinned) {
+      text += '📌 Pinned message\n';
+    }
+
+    text += '\n';
+  });
+
+  return text;
+}
+
+// Helper function to format chat as CSV
+function formatChatAsCSV(data) {
+  let csv = 'Timestamp,Sender,Message,Image,File,IsEdited,IsDeleted,IsPinned,Reactions,ReplyTo,ForwardedFrom\n';
+
+  data.messages.forEach(msg => {
+    const timestamp = new Date(msg.timestamp).toISOString();
+    const sender = msg.sender.name;
+    const text = msg.text ? `"${msg.text.replace(/"/g, '""')}"` : '';
+    const image = msg.image || '';
+    const file = msg.file ? `${msg.file.name} (${msg.file.size} bytes)` : '';
+    const isEdited = msg.isEdited ? 'Yes' : 'No';
+    const isDeleted = msg.isDeleted ? 'Yes' : 'No';
+    const isPinned = msg.isPinned ? 'Yes' : 'No';
+    const reactions = msg.reactions ? Object.entries(msg.reactions).map(([emoji, users]) => `${emoji}(${users.length})`).join('; ') : '';
+    const replyTo = msg.replyTo ? `"${msg.replyTo.text?.replace(/"/g, '""") || ''}"` : '';
+    const forwardedFrom = msg.forwardedFrom ? msg.forwardedFrom.sender || '' : '';
+
+    csv += `${timestamp},${sender},${text},${image},${file},${isEdited},${isDeleted},${isPinned},"${reactions}",${replyTo},${forwardedFrom}\n`;
+  });
+
+  return csv;
+}
