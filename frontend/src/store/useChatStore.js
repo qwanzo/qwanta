@@ -6,10 +6,13 @@ import { useAuthStore } from "./useAuthStore";
 export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
+  searchResults: [],
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
   typingUsers: [],
+  searchQuery: "",
+  messagesRead: {},
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -17,9 +20,23 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get("/messages/users");
       set({ users: res.data });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to load users");
     } finally {
       set({ isUsersLoading: false });
+    }
+  },
+
+  searchUsers: async (query) => {
+    set({ searchQuery: query });
+    if (!query.trim()) {
+      set({ searchResults: [] });
+      return;
+    }
+    try {
+      const res = await axiosInstance.get(`/messages/search?query=${encodeURIComponent(query)}`);
+      set({ searchResults: res.data });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Search failed");
     }
   },
 
@@ -28,12 +45,20 @@ export const useChatStore = create((set, get) => ({
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
       set({ messages: res.data });
+      
+      // Mark messages as read
+      try {
+        await axiosInstance.patch(`/messages/${userId}/read`);
+      } catch (error) {
+        console.error("Failed to mark messages as read:", error);
+      }
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to load messages");
     } finally {
       set({ isMessagesLoading: false });
     }
   },
+
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
     try {
@@ -44,7 +69,7 @@ export const useChatStore = create((set, get) => ({
       });
       set({ messages: [...messages, res.data] });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to send message");
     }
   },
 
@@ -65,7 +90,10 @@ export const useChatStore = create((set, get) => ({
 
     socket.on("userTyping", (userId) => {
       if (userId === selectedUser._id) {
-        set({ typingUsers: [...get().typingUsers, userId] });
+        const typingUsers = get().typingUsers;
+        if (!typingUsers.includes(userId)) {
+          set({ typingUsers: [...typingUsers, userId] });
+        }
       }
     });
 
@@ -74,6 +102,21 @@ export const useChatStore = create((set, get) => ({
         set({ typingUsers: get().typingUsers.filter(id => id !== userId) });
       }
     });
+
+    socket.on("messagesReadReceipt", (userId) => {
+      set({ 
+        messagesRead: {
+          ...get().messagesRead,
+          [userId]: true,
+        }
+      });
+      // Update local messages to show as read
+      set({
+        messages: get().messages.map(msg =>
+          msg.receiverId === userId ? { ...msg, isRead: true } : msg
+        ),
+      });
+    });
   },
 
   unsubscribeFromMessages: () => {
@@ -81,7 +124,14 @@ export const useChatStore = create((set, get) => ({
     socket.off("newMessage");
     socket.off("userTyping");
     socket.off("userStopTyping");
+    socket.off("messagesReadReceipt");
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+  setSelectedUser: (selectedUser) => {
+    set({ selectedUser, searchResults: [], searchQuery: "" });
+  },
+
+  clearSearch: () => {
+    set({ searchQuery: "", searchResults: [] });
+  },
 }));
