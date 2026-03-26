@@ -8,8 +8,6 @@ import {
   Trash2,
   Pin,
   Share2,
-  MoreVertical,
-  Smile,
 } from "lucide-react";
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -24,7 +22,6 @@ const MessageActions = ({ message, onClose }) => {
     togglePinMessage,
     setEditingMessage,
     setReplyingToMessage,
-    forwardMessage,
   } = useChatStore();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
@@ -90,7 +87,7 @@ const MessageActions = ({ message, onClose }) => {
   }
 
   return (
-    <div className="bg-base-200 rounded-lg shadow-lg p-0 min-w-[200px] z-50">
+    <div className="bg-base-100 rounded-lg shadow-lg p-0 min-w-[200px] z-50 text-base-content">
       {/* Emoji reactions */}
       {!showEmojiPicker && (
         <button
