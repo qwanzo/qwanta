@@ -9,7 +9,6 @@ const MessageInput = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [isSending, setIsSending] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const { sendMessage, selectedUser } = useChatStore();
@@ -56,15 +55,11 @@ const MessageInput = () => {
   const handleTextChange = (e) => {
     setText(e.target.value);
     if (selectedUser) {
-      if (!isTyping) {
-        setIsTyping(true);
-        socket.emit("typing", selectedUser._id);
-      }
+      socket.emit("typing", selectedUser._id);
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         socket.emit("stopTyping", selectedUser._id);
-        setIsTyping(false);
       }, 2000);
     }
   };
@@ -75,7 +70,6 @@ const MessageInput = () => {
     if (isSending) return;
 
     if (selectedUser) socket.emit("stopTyping", selectedUser._id);
-    setIsTyping(false);
 
     try {
       setIsSending(true);
@@ -142,73 +136,64 @@ const MessageInput = () => {
         </div>
       )}
 
-      <form onSubmit={handleSendMessage} className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex gap-2">
-            <input
-              type="text"
-              className="w-full input input-bordered rounded-lg input-sm sm:input-md disabled:opacity-50"
-              placeholder="Type a message..."
-              value={text}
-              onChange={handleTextChange}
-              disabled={isSending}
-            />
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={imageInputRef}
-              onChange={handleImageChange}
-              disabled={isSending}
-            />
-            <input
-              type="file"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              disabled={isSending}
-            />
+      <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+        <div className="flex-1 flex gap-2">
+          <input
+            type="text"
+            className="w-full input input-bordered rounded-lg input-sm sm:input-md disabled:opacity-50"
+            placeholder="Type a message..."
+            value={text}
+            onChange={handleTextChange}
+            disabled={isSending}
+          />
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            ref={imageInputRef}
+            onChange={handleImageChange}
+            disabled={isSending}
+          />
+          <input
+            type="file"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            disabled={isSending}
+          />
 
-            <button
-              type="button"
-              className={`hidden sm:flex btn btn-circle
-                       ${imagePreview ? "text-emerald-500" : "text-zinc-400"} 
-                       ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
-              onClick={() => imageInputRef.current?.click()}
-              disabled={isSending}
-            >
-              <Image size={20} />
-            </button>
-            <button
-              type="button"
-              className={`hidden sm:flex btn btn-circle
-                       ${filePreview ? "text-emerald-500" : "text-zinc-400"}
-                       ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isSending}
-            >
-              <Paperclip size={20} />
-            </button>
-          </div>
           <button
-            type="submit"
-            className="btn btn-sm btn-circle disabled:opacity-50"
-            disabled={(!text.trim() && !imagePreview && !filePreview) || isSending}
+            type="button"
+            className={`hidden sm:flex btn btn-circle
+                     ${imagePreview ? "text-emerald-500" : "text-zinc-400"} 
+                     ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isSending}
           >
-            {isSending ? (
-              <Loader size={22} className="animate-spin" />
-            ) : (
-              <Send size={22} />
-            )}
+            <Image size={20} />
+          </button>
+          <button
+            type="button"
+            className={`hidden sm:flex btn btn-circle
+                     ${filePreview ? "text-emerald-500" : "text-zinc-400"}
+                     ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isSending}
+          >
+            <Paperclip size={20} />
           </button>
         </div>
-
-        {/* Typing indicator */}
-        {isTyping && (
-          <div className="text-xs text-zinc-400 animate-pulse">
-            typing...
-          </div>
-        )}
+        <button
+          type="submit"
+          className="btn btn-sm btn-circle disabled:opacity-50"
+          disabled={(!text.trim() && !imagePreview && !filePreview) || isSending}
+        >
+          {isSending ? (
+            <Loader size={22} className="animate-spin" />
+          ) : (
+            <Send size={22} />
+          )}
+        </button>
       </form>
 
       <style>{`
