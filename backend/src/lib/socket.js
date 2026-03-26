@@ -17,25 +17,26 @@ export function getReceiverSocketId(userId) {
 
 // used to store online users
 const userSocketMap = {}; // {userId: socketId}
-const typingUsers = {}; // {userId: {receiverId: true}}
+const userStatusMap = {}; // {userId: status}
 
 io.on("connection", (socket) => {
   console.log("A user connected", socket.id);
 
   const userId = socket.handshake.query.userId;
-  if (userId) userSocketMap[userId] = socket.id;
+  if (userId) {
+    userSocketMap[userId] = socket.id;
+    userStatusMap[userId] = "online";
+  }
 
   // io.emit() is used to send events to all the connected clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
+  // Typing events
   socket.on("typing", (receiverId) => {
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("userTyping", userId);
     }
-    // Track typing status
-    if (!typingUsers[userId]) typingUsers[userId] = {};
-    typingUsers[userId][receiverId] = true;
   });
 
   socket.on("stopTyping", (receiverId) => {
@@ -43,12 +44,9 @@ io.on("connection", (socket) => {
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("userStopTyping", userId);
     }
-    // Untrack typing status
-    if (typingUsers[userId]) {
-      delete typingUsers[userId][receiverId];
-    }
   });
 
+  // Read receipt
   socket.on("messageRead", (data) => {
     const { senderId, receiverId } = data;
     const senderSocketId = getReceiverSocketId(senderId);
@@ -57,11 +55,32 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Status updates
+  socket.on("statusUpdated", (data) => {
+    userStatusMap[userId] = data.status;
+    io.emit("userStatusChanged", {
+      userId,
+      status: data.status,
+      statusMessage: data.statusMessage,
+    });
+  });
+
+  // Activity status
+  socket.on("userActive", (userId) => {
+    io.emit("userActivityOnline", userId);
+  });
+
+  socket.on("userInactive", (userId) => {
+    io.emit("userActivityOffline", userId);
+  });
+
+  // Disconnect
   socket.on("disconnect", () => {
     console.log("A user disconnected", socket.id);
     delete userSocketMap[userId];
-    delete typingUsers[userId];
+    delete userStatusMap[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    io.emit("userOffline", userId);
   });
 });
 

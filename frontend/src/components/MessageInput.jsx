@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { Image, Send, X, Paperclip, Loader } from "lucide-react";
+import { Image, Send, X, Paperclip, Loader, Plus } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -11,7 +11,7 @@ const MessageInput = () => {
   const [isSending, setIsSending] = useState(false);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
-  const { sendMessage, selectedUser } = useChatStore();
+  const { sendMessage, selectedUser, editingMessageId, setEditingMessage, editMessage, replyingToMessage } = useChatStore();
   const { socket } = useAuthStore();
   const typingTimeoutRef = useRef(null);
   const sendingDelayRef = useRef(null);
@@ -30,7 +30,7 @@ const MessageInput = () => {
     const reader = new FileReader();
     reader.onloadend = () => {
       setImagePreview(reader.result);
-      setFilePreview(null); // Clear file if image selected
+      setFilePreview(null);
     };
     reader.readAsDataURL(file);
   };
@@ -42,7 +42,7 @@ const MessageInput = () => {
       return;
     }
     setFilePreview(file);
-    setImagePreview(null); // Clear image if file selected
+    setImagePreview(null);
   };
 
   const removeAttachment = () => {
@@ -74,7 +74,6 @@ const MessageInput = () => {
     try {
       setIsSending(true);
 
-      // Add slight delay for better UX
       await new Promise((resolve) => {
         sendingDelayRef.current = setTimeout(resolve, 300);
       });
@@ -83,8 +82,15 @@ const MessageInput = () => {
       if (text.trim()) formData.append("text", text.trim());
       if (imagePreview) formData.append("image", imagePreview);
       if (filePreview) formData.append("file", filePreview);
+      if (replyingToMessage) formData.append("replyTo", replyingToMessage._id);
 
-      await sendMessage(formData);
+      if (editingMessageId) {
+        // Edit existing message
+        await editMessage(editingMessageId, text.trim());
+      } else {
+        // Send new message
+        await sendMessage(formData);
+      }
 
       // Clear form
       setText("");
@@ -121,7 +127,7 @@ const MessageInput = () => {
             ) : (
               <div className="w-20 h-20 flex items-center justify-center bg-base-200 rounded-lg border border-zinc-700">
                 <Paperclip size={24} />
-                <span className="ml-1 text-sm">{filePreview.name}</span>
+                <span className="ml-1 text-sm">{filePreview?.name}</span>
               </div>
             )}
             <button
@@ -141,7 +147,7 @@ const MessageInput = () => {
           <input
             type="text"
             className="w-full input input-bordered rounded-lg input-sm sm:input-md disabled:opacity-50"
-            placeholder="Type a message..."
+            placeholder={editingMessageId ? "Edit message..." : "Type a message..."}
             value={text}
             onChange={handleTextChange}
             disabled={isSending}

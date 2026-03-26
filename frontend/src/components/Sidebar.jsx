@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
-import { Users, Search, X } from "lucide-react";
+import { Users, Search, X, Archive, Volume2, Pin } from "lucide-react";
 
 const Sidebar = () => {
   const {
@@ -15,11 +15,15 @@ const Sidebar = () => {
     searchResults,
     searchQuery,
     clearSearch,
+    toggleArchiveChat,
+    togglePinChat,
+    toggleMuteChat,
   } = useChatStore();
 
-  const { onlineUsers } = useAuthStore();
+  const { onlineUsers, authUser } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [searchInput, setSearchInput] = useState("");
+  const [contextMenuOpen, setContextMenuOpen] = useState(null);
 
   useEffect(() => {
     getUsers();
@@ -102,54 +106,113 @@ const Sidebar = () => {
           const unreadCount = users
             .find(u => u._id === user._id)
             ?.unreadCount || 0;
+          const isArchived = authUser?.archivedChats?.includes(user._id);
+          const isPinned = authUser?.pinnedChats?.includes(user._id);
+          const isMuted = authUser?.mutedChats?.includes(user._id);
+
+          const handleArchive = async (e) => {
+            e.stopPropagation();
+            await toggleArchiveChat(user._id);
+          };
+
+          const handlePin = async (e) => {
+            e.stopPropagation();
+            await togglePinChat(user._id);
+          };
+
+          const handleMute = async (e) => {
+            e.stopPropagation();
+            await toggleMuteChat(user._id);
+          };
 
           return (
-            <button
-              key={user._id}
-              onClick={() => handleUserSelect(user)}
-              className={`
-                w-full p-3 flex items-center gap-3
-                hover:bg-base-300 transition-colors
-                ${selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""}
-              `}
-            >
-              <div className="relative mx-auto lg:mx-0">
-                <img
-                  src={user.profilePic || "/avatar.png"}
-                  alt={user.fullName || user.name}
-                  className="size-12 object-cover rounded-full"
-                />
-                {isOnline && (
-                  <span
-                    className="absolute bottom-0 right-0 size-3 bg-green-500 
-                    rounded-full ring-2 ring-zinc-900"
+            <div key={user._id} className="relative">
+              <button
+                onClick={() => handleUserSelect(user)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenuOpen(contextMenuOpen === user._id ? null : user._id);
+                }}
+                className={`
+                  w-full p-3 flex items-center gap-3
+                  hover:bg-base-300 transition-colors
+                  ${selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""}
+                  ${isArchived ? "opacity-60" : ""}
+                `}
+              >
+                <div className="relative mx-auto lg:mx-0">
+                  <img
+                    src={user.profilePic || "/avatar.png"}
+                    alt={user.fullName || user.name}
+                    className="size-12 object-cover rounded-full"
                   />
+                  {isOnline && (
+                    <span
+                      className="absolute bottom-0 right-0 size-3 bg-green-500 
+                      rounded-full ring-2 ring-zinc-900"
+                    />
+                  )}
+                </div>
+
+                {/* User info - only visible on larger screens */}
+                <div className="hidden lg:block text-left min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium truncate">
+                      {user.fullName || user.name}
+                    </div>
+                    {/* Chat status indicators */}
+                    <div className="flex gap-1">
+                      {isPinned && <Pin size={14} className="text-warning" />}
+                      {isMuted && <Volume2 size={14} className="text-info" />}
+                      {isArchived && <Archive size={14} className="text-zinc-500" />}
+                    </div>
+                  </div>
+                  <div className="text-sm text-zinc-400 truncate">
+                    {lastMessage
+                      ? lastMessage.text || lastMessage.image ? "📸 Image" : lastMessage.file ? "📎 File" : "No content"
+                      : isOnline
+                        ? "Online"
+                        : "Offline"}
+                  </div>
+                </div>
+
+                {/* Unread indicator */}
+                {unreadCount > 0 && !isMuted && (
+                  <div className="hidden lg:flex">
+                    <span className="badge badge-sm badge-primary">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  </div>
                 )}
-              </div>
+              </button>
 
-              {/* User info - only visible on larger screens */}
-              <div className="hidden lg:block text-left min-w-0 flex-1">
-                <div className="font-medium truncate">
-                  {user.fullName || user.name}
-                </div>
-                <div className="text-sm text-zinc-400 truncate">
-                  {lastMessage
-                    ? lastMessage.text || lastMessage.image ? "📸 Image" : lastMessage.file ? "📎 File" : "No content"
-                    : isOnline
-                      ? "Online"
-                      : "Offline"}
-                </div>
-              </div>
-
-              {/* Unread indicator */}
-              {unreadCount > 0 && (
-                <div className="hidden lg:flex">
-                  <span className="badge badge-sm badge-primary">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
+              {/* Context menu */}
+              {contextMenuOpen === user._id && (
+                <div className="absolute right-0 top-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 z-50 min-w-[150px]">
+                  <button
+                    onClick={handlePin}
+                    className="w-full px-4 py-2 text-left hover:bg-base-200 text-sm flex items-center gap-2"
+                  >
+                    <Pin size={14} />
+                    {isPinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button
+                    onClick={handleMute}
+                    className="w-full px-4 py-2 text-left hover:bg-base-200 text-sm flex items-center gap-2"
+                  >
+                    <Volume2 size={14} />
+                    {isMuted ? "Unmute" : "Mute"}
+                  </button>
+                  <button
+                    onClick={handleArchive}
+                    className="w-full px-4 py-2 text-left hover:bg-base-200 text-sm flex items-center gap-2 border-t border-base-300"
+                  >
+                    <Archive size={14} />
+                    {isArchived ? "Unarchive" : "Archive"}
+                  </button>
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
 

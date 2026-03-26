@@ -144,7 +144,7 @@ export const sendMessage = [
   upload.single("file"),
   async (req, res) => {
     try {
-      const { text, image } = req.body;
+      const { text, image, replyTo } = req.body;
       const { id: receiverId } = req.params;
       const senderId = req.user._id;
 
@@ -177,9 +177,11 @@ export const sendMessage = [
         image: imageUrl,
         file: fileData,
         isRead: false,
+        replyTo: replyTo || null,
       });
 
       await newMessage.save();
+      await newMessage.populate("replyTo");
 
       const receiverSocketId = getReceiverSocketId(receiverId);
       if (receiverSocketId) {
@@ -193,3 +195,530 @@ export const sendMessage = [
     }
   }
 ];
+
+// Add reaction to message
+export const addReaction = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { emoji } = req.body;
+    const userId = req.user._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (!message.reactions) {
+      message.reactions = new Map();
+    }
+
+    if (!message.reactions.has(emoji)) {
+      message.reactions.set(emoji, []);
+    }
+
+    const usersWithReaction = message.reactions.get(emoji);
+    if (!usersWithReaction.some(id => id.toString() === userId.toString())) {
+      usersWithReaction.push(userId);
+      message.markModified("reactions");
+    }
+
+    await message.save();
+
+    // Emit to both users
+    const receiverId = message.receiverId;
+    const senderId = message.senderId;
+    const otherUserId = userId.toString() === senderId.toString() ? receiverId : senderId;
+
+    const otherUserSocketId = getReceiverSocketId(otherUserId);
+    if (otherUserSocketId) {
+      io.to(otherUserSocketId).emit("messageReactionAdded", {
+        messageId,
+        emoji,
+        userId,
+        reactions: Object.fromEntries(message.reactions),
+      });
+    }
+
+    res.status(200).json({ reactions: Object.fromEntries(message.reactions) });
+  } catch (error) {
+    console.log("Error in addReaction: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Remove reaction from message
+export const removeReaction = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { emoji } = req.body;
+    const userId = req.user._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (message.reactions && message.reactions.has(emoji)) {
+      const usersWithReaction = message.reactions.get(emoji);
+      const index = usersWithReaction.findIndex(id => id.toString() === userId.toString());
+      if (index !== -1) {
+        usersWithReaction.splice(index, 1);
+        if (usersWithReaction.length === 0) {
+          message.reactions.delete(emoji);
+        }
+        message.markModified("reactions");
+        await message.save();
+      }
+    }
+
+    // Emit to other user
+    const receiverId = message.receiverId;
+    const senderId = message.senderId;
+    const otherUserId = userId.toString() === senderId.toString() ? receiverId : senderId;
+
+    const otherUserSocketId = getReceiverSocketId(otherUserId);
+    if (otherUserSocketId) {
+      io.to(otherUserSocketId).emit("messageReactionRemoved", {
+        messageId,
+        emoji,
+        userId,
+        reactions: Object.fromEntries(message.reactions || new Map()),
+      });
+    }
+
+    res.status(200).json({ reactions: Object.fromEntries(message.reactions || new Map()) });
+  } catch (error) {
+    console.log("Error in removeReaction: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Edit message
+export const editMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { text } = req.body;
+    const userId = req.user._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (message.senderId.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "Can only edit your own messages" });
+    }
+
+    // Add to edit history
+    if (!message.editHistory) {
+      message.editHistory = [];
+    }
+    message.editHistory.push({
+      text: message.text,
+      editedAt: new Date(),
+    });
+
+    message.text = text;
+    message.isEdited = true;
+    message.editedAt = new Date();
+
+    await message.save();
+
+    // Emit to other user
+    const receiverId = message.receiverId;
+    const otherUserSocketId = getReceiverSocketId(receiverId);
+    if (otherUserSocketId) {
+      io.to(otherUserSocketId).emit("messageEdited", {
+        messageId,
+        text,
+        isEdited: true,
+        editedAt: message.editedAt,
+      });
+    }
+
+    res.status(200).json(message);
+  } catch (error) {
+    console.log("Error in editMessage: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Delete message
+export const deleteMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { deleteForEveryone } = req.body;
+    const userId = req.user._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (message.senderId.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "Can only delete your own messages" });
+    }
+
+    if (deleteForEveryone) {
+      message.isDeleted = true;
+      message.deletedAt = new Date();
+      message.text = "[Message deleted]";
+      message.image = null;
+      message.file = null;
+
+      await message.save();
+
+      // Emit to other user
+      const receiverId = message.receiverId;
+      const otherUserSocketId = getReceiverSocketId(receiverId);
+      if (otherUserSocketId) {
+        io.to(otherUserSocketId).emit("messageDeleted", { messageId, deletedForEveryone: true });
+      }
+    } else {
+      // Delete only for self
+      if (!message.deleteFor) {
+        message.deleteFor = [];
+      }
+      message.deleteFor.push(userId);
+      await message.save();
+    }
+
+    res.status(200).json({ message: "Message deleted successfully" });
+  } catch (error) {
+    console.log("Error in deleteMessage: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Pin/Unpin message
+export const togglePinMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    message.isPinned = !message.isPinned;
+    message.pinnedAt = message.isPinned ? new Date() : null;
+    message.pinnedBy = message.isPinned ? userId : null;
+
+    await message.save();
+
+    // Emit to both users
+    const receiverId = message.receiverId;
+    const senderId = message.senderId;
+    const otherUserId = userId.toString() === senderId.toString() ? receiverId : senderId;
+
+    const otherUserSocketId = getReceiverSocketId(otherUserId);
+    if (otherUserSocketId) {
+      io.to(otherUserSocketId).emit("messagePinToggled", {
+        messageId,
+        isPinned: message.isPinned,
+      });
+    }
+
+    res.status(200).json(message);
+  } catch (error) {
+    console.log("Error in togglePinMessage: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get pinned messages
+export const getPinnedMessages = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+
+    const pinnedMessages = await Message.find({
+      isPinned: true,
+      $or: [
+        { senderId: myId, receiverId: userId },
+        { senderId: userId, receiverId: myId },
+      ],
+    })
+      .populate("senderId", "fullName profilePic")
+      .populate("receiverId", "fullName profilePic")
+      .sort({ pinnedAt: -1 });
+
+    res.status(200).json(pinnedMessages);
+  } catch (error) {
+    console.log("Error in getPinnedMessages: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Search messages
+export const searchMessages = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { query, sender } = req.query;
+    const myId = req.user._id;
+
+    if (!query || query.trim() === "") {
+      return res.status(200).json([]);
+    }
+
+    const filterObj = {
+      $or: [
+        { senderId: myId, receiverId: userId },
+        { senderId: userId, receiverId: myId },
+      ],
+      isDeleted: false,
+      text: { $regex: query, $options: "i" },
+    };
+
+    if (sender) {
+      filterObj.senderId = sender === "me" ? myId : userId;
+    }
+
+    const results = await Message.find(filterObj)
+      .populate("senderId", "fullName profilePic")
+      .populate("receiverId", "fullName profilePic")
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.log("Error in searchMessages: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Forwrd message
+export const forwardMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { receiverId } = req.body;
+    const senderId = req.user._id;
+
+    const originalMessage = await Message.findById(messageId);
+    if (!originalMessage) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const forwardedMessage = new Message({
+      senderId,
+      receiverId,
+      text: originalMessage.text,
+      image: originalMessage.image,
+      file: originalMessage.file,
+      forwardedFrom: messageId,
+      isRead: false,
+    });
+
+    await forwardedMessage.save();
+
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", forwardedMessage);
+    }
+
+    res.status(201).json(forwardedMessage);
+  } catch (error) {
+    console.log("Error in forwardMessage: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Update user status
+export const updateUserStatus = async (req, res) => {
+  try {
+    const { status, statusMessage } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        status,
+        statusMessage: statusMessage || "",
+        lastSeen: new Date(),
+      },
+      { new: true }
+    ).select("-password");
+
+    // Broadcast status change
+    io.emit("userStatusChanged", {
+      userId,
+      status,
+      statusMessage,
+    });
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.log("Error in updateUserStatus: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get user status
+export const getUserStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId).select("status statusMessage lastSeen");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.log("Error in getUserStatus: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Archive chat
+export const toggleArchiveChat = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+
+    const user = await User.findById(myId);
+
+    if (!user.archivedChats) {
+      user.archivedChats = [];
+    }
+
+    const chatIndex = user.archivedChats.findIndex(id => id.toString() === userId);
+
+    if (chatIndex > -1) {
+      user.archivedChats.splice(chatIndex, 1);
+    } else {
+      user.archivedChats.push(userId);
+    }
+
+    await user.save();
+    res.status(200).json({ archived: chatIndex === -1 });
+  } catch (error) {
+    console.log("Error in toggleArchiveChat: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Pin chat
+export const togglePinChat = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+
+    const user = await User.findById(myId);
+
+    if (!user.pinnedChats) {
+      user.pinnedChats = [];
+    }
+
+    const chatIndex = user.pinnedChats.findIndex(id => id.toString() === userId);
+
+    if (chatIndex > -1) {
+      user.pinnedChats.splice(chatIndex, 1);
+    } else {
+      user.pinnedChats.push(userId);
+    }
+
+    await user.save();
+    res.status(200).json({ pinned: chatIndex === -1 });
+  } catch (error) {
+    console.log("Error in togglePinChat: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Mute chat
+export const toggleMuteChat = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+
+    const user = await User.findById(myId);
+
+    if (!user.mutedChats) {
+      user.mutedChats = [];
+    }
+
+    const chatIndex = user.mutedChats.findIndex(id => id.toString() === userId);
+
+    if (chatIndex > -1) {
+      user.mutedChats.splice(chatIndex, 1);
+    } else {
+      user.mutedChats.push(userId);
+    }
+
+    await user.save();
+    res.status(200).json({ muted: chatIndex === -1 });
+  } catch (error) {
+    console.log("Error in toggleMuteChat: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Clear chat history
+export const clearChatHistory = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+
+    await Message.deleteMany({
+      $or: [
+        { senderId: myId, receiverId: userId },
+        { senderId: userId, receiverId: myId },
+      ],
+    });
+
+    // Emit to other user
+    const otherUserSocketId = getReceiverSocketId(userId);
+    if (otherUserSocketId) {
+      io.to(otherUserSocketId).emit("chatCleared");
+    }
+
+    res.status(200).json({ message: "Chat history cleared" });
+  } catch (error) {
+    console.log("Error in clearChatHistory: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Update theme
+export const updateTheme = async (req, res) => {
+  try {
+    const { theme } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { theme },
+      { new: true }
+    ).select("-password");
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.log("Error in updateTheme: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Set chat background
+export const setChatBackground = async (req, res) => {
+  try {
+    const { chatUserId, backgroundUrl } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user.chatBackgrounds) {
+      user.chatBackgrounds = new Map();
+    }
+
+    user.chatBackgrounds.set(chatUserId, backgroundUrl);
+    user.markModified("chatBackgrounds");
+    await user.save();
+
+    res.status(200).json({ message: "Background updated" });
+  } catch (error) {
+    console.log("Error in setChatBackground: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

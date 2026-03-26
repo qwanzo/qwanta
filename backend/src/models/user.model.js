@@ -20,6 +20,36 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Status and presence
+    status: {
+      type: String,
+      enum: ["online", "away", "dnd", "offline"],
+      default: "offline",
+    },
+    statusMessage: {
+      type: String,
+      default: "",
+    },
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
+    // Chat settings
+    archivedChats: [mongoose.Schema.Types.ObjectId],
+    pinnedChats: [mongoose.Schema.Types.ObjectId],
+    mutedChats: [mongoose.Schema.Types.ObjectId],
+    blockedUsers: [mongoose.Schema.Types.ObjectId],
+    // Preferences
+    theme: {
+      type: String,
+      enum: ["light", "dark"],
+      default: "dark",
+    },
+    chatBackgrounds: {
+      type: Map,
+      of: String,
+      default: new Map(),
+    },
   },
   { timestamps: true }
 );
