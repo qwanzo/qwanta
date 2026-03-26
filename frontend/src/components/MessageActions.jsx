@@ -41,9 +41,12 @@ const MessageActions = ({ message, onClose }) => {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.text);
-    toast.success("Copied to clipboard");
-    onClose();
+    navigator.clipboard.writeText(message.text).then(() => {
+      toast.success("Copied to clipboard");
+      onClose();
+    }).catch(() => {
+      toast.error("Failed to copy to clipboard");
+    });
   };
 
   const handleEdit = () => {

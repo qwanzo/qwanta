@@ -174,28 +174,30 @@ const ChatContainer = () => {
                 )}
 
                 <div className="flex gap-2 items-end group/message">
-                  <div
-                    className="relative opacity-0 group-hover/message:opacity-100 transition-opacity"
-                  >
-                    <button
-                      className="btn btn-xs btn-ghost"
-                      onClick={() =>
-                        setActiveMessageMenu(
-                          activeMessageMenu === message._id ? null : message._id
-                        )
-                      }
+                  {message.senderId !== authUser._id && (
+                    <div
+                      className="relative opacity-0 group-hover/message:opacity-100 transition-opacity"
                     >
-                      <MoreVertical size={14} />
-                    </button>
-                    {activeMessageMenu === message._id && (
-                      <div className="absolute bottom-full right-0 mb-2 z-50">
-                        <MessageActions
-                          message={message}
-                          onClose={() => setActiveMessageMenu(null)}
-                        />
-                      </div>
-                    )}
-                  </div>
+                      <button
+                        className="btn btn-xs btn-ghost"
+                        onClick={() =>
+                          setActiveMessageMenu(
+                            activeMessageMenu === message._id ? null : message._id
+                          )
+                        }
+                      >
+                        <MoreVertical size={14} />
+                      </button>
+                      {activeMessageMenu === message._id && (
+                        <div className="absolute bottom-full right-0 mb-2 z-50">
+                          <MessageActions
+                            message={message}
+                            onClose={() => setActiveMessageMenu(null)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <div
