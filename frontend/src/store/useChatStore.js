@@ -9,6 +9,7 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  typingUsers: [],
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -36,7 +37,11 @@ export const useChatStore = create((set, get) => ({
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       set({ messages: [...messages, res.data] });
     } catch (error) {
       toast.error(error.response.data.message);
@@ -57,11 +62,25 @@ export const useChatStore = create((set, get) => ({
         messages: [...get().messages, newMessage],
       });
     });
+
+    socket.on("userTyping", (userId) => {
+      if (userId === selectedUser._id) {
+        set({ typingUsers: [...get().typingUsers, userId] });
+      }
+    });
+
+    socket.on("userStopTyping", (userId) => {
+      if (userId === selectedUser._id) {
+        set({ typingUsers: get().typingUsers.filter(id => id !== userId) });
+      }
+    });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     socket.off("newMessage");
+    socket.off("userTyping");
+    socket.off("userStopTyping");
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
