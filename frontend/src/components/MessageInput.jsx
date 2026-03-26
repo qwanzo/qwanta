@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { Image, Send, X, Paperclip } from "lucide-react";
+import { Image, Send, X, Paperclip, Loader } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -8,11 +8,14 @@ const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
+  const [isSending, setIsSending] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const { sendMessage, selectedUser } = useChatStore();
   const { socket } = useAuthStore();
   const typingTimeoutRef = useRef(null);
+  const sendingDelayRef = useRef(null);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -53,21 +56,35 @@ const MessageInput = () => {
   const handleTextChange = (e) => {
     setText(e.target.value);
     if (selectedUser) {
-      socket.emit("typing", selectedUser._id);
+      if (!isTyping) {
+        setIsTyping(true);
+        socket.emit("typing", selectedUser._id);
+      }
+
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         socket.emit("stopTyping", selectedUser._id);
-      }, 1000);
+        setIsTyping(false);
+      }, 2000);
     }
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview && !filePreview) return;
+    if (isSending) return;
 
     if (selectedUser) socket.emit("stopTyping", selectedUser._id);
+    setIsTyping(false);
 
     try {
+      setIsSending(true);
+
+      // Add slight delay for better UX
+      await new Promise((resolve) => {
+        sendingDelayRef.current = setTimeout(resolve, 300);
+      });
+
       const formData = new FormData();
       if (text.trim()) formData.append("text", text.trim());
       if (imagePreview) formData.append("image", imagePreview);
@@ -83,13 +100,23 @@ const MessageInput = () => {
       if (imageInputRef.current) imageInputRef.current.value = "";
     } catch (error) {
       console.error("Failed to send message:", error);
+      toast.error("Failed to send message");
+    } finally {
+      setIsSending(false);
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (sendingDelayRef.current) clearTimeout(sendingDelayRef.current);
+    };
+  }, []);
+
   return (
-    <div className="p-4 w-full">
+    <div className="p-4 w-full border-t border-base-300">
       {(imagePreview || filePreview) && (
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2 animate-fadeIn">
           <div className="relative">
             {imagePreview ? (
               <img
@@ -106,7 +133,7 @@ const MessageInput = () => {
             <button
               onClick={removeAttachment}
               className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-base-300
-              flex items-center justify-center"
+              flex items-center justify-center hover:bg-base-400 transition-colors"
               type="button"
             >
               <X className="size-3" />
@@ -115,55 +142,93 @@ const MessageInput = () => {
         </div>
       )}
 
-      <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-        <div className="flex-1 flex gap-2">
-          <input
-            type="text"
-            className="w-full input input-bordered rounded-lg input-sm sm:input-md"
-            placeholder="Type a message..."
-            value={text}
-            onChange={handleTextChange}
-          />
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            ref={imageInputRef}
-            onChange={handleImageChange}
-          />
-          <input
-            type="file"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-          />
+      <form onSubmit={handleSendMessage} className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex gap-2">
+            <input
+              type="text"
+              className="w-full input input-bordered rounded-lg input-sm sm:input-md disabled:opacity-50"
+              placeholder="Type a message..."
+              value={text}
+              onChange={handleTextChange}
+              disabled={isSending}
+            />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={imageInputRef}
+              onChange={handleImageChange}
+              disabled={isSending}
+            />
+            <input
+              type="file"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              disabled={isSending}
+            />
 
+            <button
+              type="button"
+              className={`hidden sm:flex btn btn-circle
+                       ${imagePreview ? "text-emerald-500" : "text-zinc-400"} 
+                       ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
+              onClick={() => imageInputRef.current?.click()}
+              disabled={isSending}
+            >
+              <Image size={20} />
+            </button>
+            <button
+              type="button"
+              className={`hidden sm:flex btn btn-circle
+                       ${filePreview ? "text-emerald-500" : "text-zinc-400"}
+                       ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending}
+            >
+              <Paperclip size={20} />
+            </button>
+          </div>
           <button
-            type="button"
-            className={`hidden sm:flex btn btn-circle
-                     ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
-            onClick={() => imageInputRef.current?.click()}
+            type="submit"
+            className="btn btn-sm btn-circle disabled:opacity-50"
+            disabled={(!text.trim() && !imagePreview && !filePreview) || isSending}
           >
-            <Image size={20} />
-          </button>
-          <button
-            type="button"
-            className={`hidden sm:flex btn btn-circle
-                     ${filePreview ? "text-emerald-500" : "text-zinc-400"}`}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Paperclip size={20} />
+            {isSending ? (
+              <Loader size={22} className="animate-spin" />
+            ) : (
+              <Send size={22} />
+            )}
           </button>
         </div>
-        <button
-          type="submit"
-          className="btn btn-sm btn-circle"
-          disabled={!text.trim() && !imagePreview}
-        >
-          <Send size={22} />
-        </button>
+
+        {/* Typing indicator */}
+        {isTyping && (
+          <div className="text-xs text-zinc-400 animate-pulse">
+            typing...
+          </div>
+        )}
       </form>
+
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 };
+
 export default MessageInput;

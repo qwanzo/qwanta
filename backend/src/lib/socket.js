@@ -17,6 +17,7 @@ export function getReceiverSocketId(userId) {
 
 // used to store online users
 const userSocketMap = {}; // {userId: socketId}
+const typingUsers = {}; // {userId: {receiverId: true}}
 
 io.on("connection", (socket) => {
   console.log("A user connected", socket.id);
@@ -32,6 +33,9 @@ io.on("connection", (socket) => {
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("userTyping", userId);
     }
+    // Track typing status
+    if (!typingUsers[userId]) typingUsers[userId] = {};
+    typingUsers[userId][receiverId] = true;
   });
 
   socket.on("stopTyping", (receiverId) => {
@@ -39,11 +43,24 @@ io.on("connection", (socket) => {
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("userStopTyping", userId);
     }
+    // Untrack typing status
+    if (typingUsers[userId]) {
+      delete typingUsers[userId][receiverId];
+    }
+  });
+
+  socket.on("messageRead", (data) => {
+    const { senderId, receiverId } = data;
+    const senderSocketId = getReceiverSocketId(senderId);
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messagesReadReceipt", receiverId);
+    }
   });
 
   socket.on("disconnect", () => {
     console.log("A user disconnected", socket.id);
     delete userSocketMap[userId];
+    delete typingUsers[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
