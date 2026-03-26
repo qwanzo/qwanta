@@ -35,8 +35,11 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: res.data });
       toast.success("Account created successfully");
       get().connectSocket();
+      return true;
     } catch (error) {
-      toast.error(error.response.data.message);
+      const message = error?.response?.data?.message || "Failed to sign up";
+      toast.error(message);
+      return false;
     } finally {
       set({ isSigningUp: false });
     }
@@ -48,10 +51,12 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/login", data);
       set({ authUser: res.data });
       toast.success("Logged in successfully");
-
       get().connectSocket();
+      return true;
     } catch (error) {
-      toast.error(error.response.data.message);
+      const message = error?.response?.data?.message || "Invalid credentials";
+      toast.error(message);
+      return false;
     } finally {
       set({ isLoggingIn: false });
     }
