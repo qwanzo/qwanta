@@ -12,7 +12,6 @@ import QuotedMessage from "./QuotedMessage";
 import MessageActions from "./MessageActions";
 import MessageSearch from "./MessageSearch";
 import ReplyPreview from "./ReplyPreview";
-import EditingIndicator from "./EditingIndicator";
 
 const ChatContainer = () => {
   const {
@@ -27,10 +26,6 @@ const ChatContainer = () => {
     getPinnedMessages,
     editingMessageId,
     setEditingMessage,
-    addReaction,
-    removeReaction,
-    toggleMuteChat,
-    togglePinChat,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -52,42 +47,6 @@ const ChatContainer = () => {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (!selectedUser?._id) return;
-
-      // Ctrl+K = open search
-      if (e.ctrlKey && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setShowSearch((s) => !s);
-      }
-
-      // Ctrl+M = mute/unmute chat
-      if (e.ctrlKey && e.key.toLowerCase() === "m") {
-        e.preventDefault();
-        toggleMuteChat(selectedUser._id);
-      }
-
-      // Ctrl+P = pin/unpin chat
-      if (e.ctrlKey && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        togglePinChat(selectedUser._id);
-      }
-
-      // Ctrl+E = edit last own message
-      if (e.ctrlKey && e.key.toLowerCase() === "e") {
-        e.preventDefault();
-        const lastOwn = [...messages].reverse().find((msg) => msg.senderId === authUser._id && !msg.isDeleted);
-        if (lastOwn) {
-          setEditingMessage(lastOwn._id);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [messages, selectedUser, authUser, toggleMuteChat, togglePinChat, setEditingMessage]);
 
   if (isMessagesLoading) {
     return (
@@ -200,18 +159,7 @@ const ChatContainer = () => {
                   )}
 
                   <div>
-                    <div
-                  className="chat-bubble flex flex-col hover:cursor-pointer"
-                  onDoubleClick={() => {
-                    const hasHeart = message.reactions?.["❤️"]?.includes(authUser._id);
-                    if (hasHeart) {
-                      removeReaction(message._id, "❤️");
-                    } else {
-                      addReaction(message._id, "❤️");
-                    }
-                  }}
-                  title="Double-click to ❤️ react"
-                >
+                    <div className="chat-bubble flex flex-col">
                       {message.image && (
                         <img
                           src={message.image}
@@ -335,9 +283,6 @@ const ChatContainer = () => {
 
       {/* Reply Preview */}
       <ReplyPreview />
-
-      {/* Editing Indicator */}
-      <EditingIndicator />
 
       <MessageInput />
 

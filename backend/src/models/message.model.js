@@ -35,6 +35,71 @@ const messageSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Reactions: {emoji: [userId]}
+    reactions: {
+      type: Map,
+      of: [mongoose.Schema.Types.ObjectId],
+      default: new Map(),
+    },
+    // Message editing
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
+    },
+    editHistory: [
+      {
+        text: String,
+        editedAt: Date,
+      },
+    ],
+    // Message deletion
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deleteFor: [mongoose.Schema.Types.ObjectId], // only in private - users who deleted it
+    // Pinning
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
+    pinnedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    // Reply/Quote
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+    // Forwarding
+    forwardedFrom: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+    // Self-destructing message
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+    isExpired: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
