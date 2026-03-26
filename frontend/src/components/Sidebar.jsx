@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
@@ -24,10 +24,40 @@ const Sidebar = () => {
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [contextMenuOpen, setContextMenuOpen] = useState(null);
+  const longPressRef = useRef(null);
+  const didLongPressRef = useRef(false);
 
   useEffect(() => {
     getUsers();
   }, [getUsers]);
+
+  // Close context menu when tapping/clicking outside
+  useEffect(() => {
+    if (!contextMenuOpen) return;
+    const close = () => setContextMenuOpen(null);
+    document.addEventListener("click", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [contextMenuOpen]);
+
+  const handleUserLongPressStart = (userId) => {
+    didLongPressRef.current = false;
+    longPressRef.current = setTimeout(() => {
+      didLongPressRef.current = true;
+      setContextMenuOpen(userId);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 500);
+  };
+
+  const handleUserLongPressEnd = () => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  };
 
   const handleSearch = (e) => {
     const query = e.target.value;
@@ -55,15 +85,15 @@ const Sidebar = () => {
   if (isUsersLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
+    <aside className="h-full w-full lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center gap-2 mb-4">
           <Users className="size-6" />
-          <span className="font-medium hidden lg:block">Messages</span>
+          <span className="font-medium">Messages</span>
         </div>
 
         {/* Search Bar */}
-        <div className="hidden lg:flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-2.5 size-4 text-zinc-400" />
             <input
@@ -71,7 +101,7 @@ const Sidebar = () => {
               placeholder="Search users..."
               value={searchInput}
               onChange={handleSearch}
-              className="w-full pl-8 pr-8 py-1.5 input input-bordered input-sm"
+              className="w-full pl-8 pr-8 py-1.5 input input-bordered input-sm text-[16px] lg:text-sm"
             />
             {searchInput && (
               <button
@@ -85,7 +115,7 @@ const Sidebar = () => {
         </div>
 
         {/* Online filter toggle */}
-        <div className="mt-3 hidden lg:flex items-center gap-2">
+        <div className="mt-3 flex items-center gap-2">
           <label className="cursor-pointer flex items-center gap-2">
             <input
               type="checkbox"
@@ -128,11 +158,20 @@ const Sidebar = () => {
           return (
             <div key={user._id} className="relative">
               <button
-                onClick={() => handleUserSelect(user)}
+                onClick={() => {
+                  if (didLongPressRef.current) {
+                    didLongPressRef.current = false;
+                    return;
+                  }
+                  handleUserSelect(user);
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setContextMenuOpen(contextMenuOpen === user._id ? null : user._id);
                 }}
+                onTouchStart={() => handleUserLongPressStart(user._id)}
+                onTouchEnd={handleUserLongPressEnd}
+                onTouchMove={handleUserLongPressEnd}
                 className={`
                   w-full p-3 flex items-center gap-3
                   hover:bg-base-300 transition-colors
@@ -140,7 +179,7 @@ const Sidebar = () => {
                   ${isArchived ? "opacity-60" : ""}
                 `}
               >
-                <div className="relative mx-auto lg:mx-0">
+                <div className="relative">
                   <img
                     src={user.profilePic || "/avatar.png"}
                     alt={user.fullName || user.name}
@@ -154,8 +193,8 @@ const Sidebar = () => {
                   )}
                 </div>
 
-                {/* User info - only visible on larger screens */}
-                <div className="hidden lg:block text-left min-w-0 flex-1">
+                {/* User info */}
+                <div className="block text-left min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <div className="font-medium truncate">
                       {user.fullName || user.name}
@@ -178,7 +217,7 @@ const Sidebar = () => {
 
                 {/* Unread indicator */}
                 {unreadCount > 0 && !isMuted && (
-                  <div className="hidden lg:flex">
+                  <div className="flex">
                     <span className="badge badge-sm badge-primary">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
@@ -186,9 +225,13 @@ const Sidebar = () => {
                 )}
               </button>
 
-              {/* Context menu */}
+              {/* Context menu (right-click on desktop, long-press on mobile) */}
               {contextMenuOpen === user._id && (
-                <div className="absolute right-0 top-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 z-50 min-w-[150px]">
+                <div
+                  className="absolute right-0 top-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 z-50 min-w-[150px]"
+                  onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                >
                   <button
                     onClick={handlePin}
                     className="w-full px-4 py-2 text-left hover:bg-base-200 text-sm flex items-center gap-2"

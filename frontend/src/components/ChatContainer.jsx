@@ -34,9 +34,26 @@ const ChatContainer = () => {
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
+  const longPressRef = useRef(null);
+  const ignoreNextClickRef = useRef(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showPinned, setShowPinned] = useState(false);
   const [activeMessageMenu, setActiveMessageMenu] = useState(null);
+
+  const handleLongPressStart = (messageId) => {
+    longPressRef.current = setTimeout(() => {
+      ignoreNextClickRef.current = true;
+      setActiveMessageMenu(messageId);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 500);
+  };
+
+  const handleLongPressEnd = () => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  };
 
   useEffect(() => {
     getMessages(selectedUser._id);
@@ -141,7 +158,13 @@ const ChatContainer = () => {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 message-container">
+      <div
+        className="flex-1 overflow-y-auto p-4 space-y-4 message-container"
+        onClick={() => {
+          if (ignoreNextClickRef.current) { ignoreNextClickRef.current = false; return; }
+          if (activeMessageMenu) setActiveMessageMenu(null);
+        }}
+      >
         {messages.map((message, index) => {
           if (message.isDeleted) return null;
 
@@ -175,21 +198,23 @@ const ChatContainer = () => {
 
                 <div className="flex gap-2 items-end group/message">
                   {message.senderId !== authUser._id && (
-                    <div
-                      className="relative opacity-0 group-hover/message:opacity-100 transition-opacity"
-                    >
+                    <div className="relative opacity-0 group-hover/message:opacity-100 transition-opacity msg-action-btn">
                       <button
                         className="btn btn-xs btn-ghost"
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setActiveMessageMenu(
                             activeMessageMenu === message._id ? null : message._id
-                          )
-                        }
+                          );
+                        }}
                       >
                         <MoreVertical size={14} />
                       </button>
                       {activeMessageMenu === message._id && (
-                        <div className="absolute bottom-full right-0 mb-2 z-50">
+                        <div
+                          className="absolute bottom-full right-0 mb-2 z-50"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <MessageActions
                             message={message}
                             onClose={() => setActiveMessageMenu(null)}
@@ -201,17 +226,20 @@ const ChatContainer = () => {
 
                   <div>
                     <div
-                  className="chat-bubble flex flex-col hover:cursor-pointer"
-                  onDoubleClick={() => {
-                    const hasHeart = message.reactions?.["❤️"]?.includes(authUser._id);
-                    if (hasHeart) {
-                      removeReaction(message._id, "❤️");
-                    } else {
-                      addReaction(message._id, "❤️");
-                    }
-                  }}
-                  title="Double-click to ❤️ react"
-                >
+                      className="chat-bubble flex flex-col hover:cursor-pointer no-callout"
+                      onDoubleClick={() => {
+                        const hasHeart = message.reactions?.["❤️"]?.includes(authUser._id);
+                        if (hasHeart) {
+                          removeReaction(message._id, "❤️");
+                        } else {
+                          addReaction(message._id, "❤️");
+                        }
+                      }}
+                      onTouchStart={(e) => { e.stopPropagation(); handleLongPressStart(message._id); }}
+                      onTouchEnd={handleLongPressEnd}
+                      onTouchMove={handleLongPressEnd}
+                      title="Double-click to ❤️ react"
+                    >
                       {message.image && (
                         <img
                           src={message.image}
@@ -268,21 +296,23 @@ const ChatContainer = () => {
                   </div>
 
                   {message.senderId === authUser._id && (
-                    <div
-                      className="relative opacity-0 group-hover/message:opacity-100 transition-opacity"
-                    >
+                    <div className="relative opacity-0 group-hover/message:opacity-100 transition-opacity msg-action-btn">
                       <button
                         className="btn btn-xs btn-ghost"
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setActiveMessageMenu(
                             activeMessageMenu === message._id ? null : message._id
-                          )
-                        }
+                          );
+                        }}
                       >
                         <MoreVertical size={14} />
                       </button>
                       {activeMessageMenu === message._id && (
-                        <div className="absolute bottom-full right-0 mb-2 z-50">
+                        <div
+                          className="absolute bottom-full right-0 mb-2 z-50"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <MessageActions
                             message={message}
                             onClose={() => setActiveMessageMenu(null)}

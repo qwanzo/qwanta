@@ -9,6 +9,7 @@ const MessageInput = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [isSending, setIsSending] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const { sendMessage, selectedUser, editingMessageId, setEditingMessage, editMessage, replyingToMessage } = useChatStore();
@@ -114,7 +115,7 @@ const MessageInput = () => {
   }, []);
 
   return (
-    <div className="p-4 w-full border-t border-base-300">
+    <div className="px-4 pt-4 pb-safe w-full border-t border-base-300">
       {(imagePreview || filePreview) && (
         <div className="mb-3 flex items-center gap-2 animate-fadeIn">
           <div className="relative">
@@ -143,10 +144,43 @@ const MessageInput = () => {
       )}
 
       <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+        {/* Mobile attachment button */}
+        <div className="relative sm:hidden">
+          <button
+            type="button"
+            className={`btn btn-circle btn-sm ${isSending ? "opacity-50 cursor-not-allowed" : ""}`}
+            onClick={() => setShowAttachMenu(!showAttachMenu)}
+            disabled={isSending}
+            aria-label="Attach"
+          >
+            <Plus size={18} />
+          </button>
+          {showAttachMenu && (
+            <div className="absolute bottom-full left-0 mb-2 bg-base-100 rounded-xl shadow-lg border border-base-300 p-3 flex gap-3 z-50">
+              <button
+                type="button"
+                className="flex flex-col items-center gap-1 p-3 hover:bg-base-200 rounded-lg active:bg-base-300 transition-colors"
+                onClick={() => { imageInputRef.current?.click(); setShowAttachMenu(false); }}
+              >
+                <Image size={22} />
+                <span className="text-xs">Photo</span>
+              </button>
+              <button
+                type="button"
+                className="flex flex-col items-center gap-1 p-3 hover:bg-base-200 rounded-lg active:bg-base-300 transition-colors"
+                onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
+              >
+                <Paperclip size={22} />
+                <span className="text-xs">File</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex-1 flex gap-2">
           <input
             type="text"
-            className="w-full input input-bordered rounded-lg input-sm sm:input-md disabled:opacity-50"
+            className="w-full input input-bordered rounded-lg input-sm sm:input-md text-[16px] sm:text-sm disabled:opacity-50"
             placeholder={editingMessageId ? "Edit message..." : "Type a message..."}
             value={text}
             onChange={handleTextChange}

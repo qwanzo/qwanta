@@ -1,4 +1,4 @@
-import { X, Pin, Search, MoreVertical, Download } from "lucide-react";
+import { X, Pin, Search, MoreVertical, Download, ChevronLeft } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useState } from "react";
@@ -18,6 +18,14 @@ const ChatHeader = ({ onSearchClick, onPinnedClick }) => {
     <div className="p-2.5 border-b border-base-300">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 flex-1">
+          {/* Back button — mobile only */}
+          <button
+            onClick={() => setSelectedUser(null)}
+            className="btn btn-sm btn-ghost lg:hidden -ml-1 mr-0"
+            aria-label="Back"
+          >
+            <ChevronLeft size={22} />
+          </button>
           {/* Avatar */}
           <div className="avatar">
             <div className="size-10 rounded-full relative">
@@ -98,8 +106,8 @@ const ChatHeader = ({ onSearchClick, onPinnedClick }) => {
             )}
           </div>
 
-          {/* Close button */}
-          <button onClick={() => setSelectedUser(null)} className="btn btn-sm btn-ghost">
+          {/* Close button — desktop only */}
+          <button onClick={() => setSelectedUser(null)} className="btn btn-sm btn-ghost hidden lg:inline-flex">
             <X size={18} />
           </button>
         </div>
