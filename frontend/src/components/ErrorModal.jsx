@@ -213,12 +213,6 @@ const ErrorModal = ({ error, onClose, onRetry }) => {
             </ul>
           </div>
 
-          {/* Error ID for debugging (only in development) */}
-          {process.env.NODE_ENV === 'development' && error?.response?.data?.errorId && (
-            <div className="text-xs text-base-content/50 mb-4 p-2 bg-base-200 rounded">
-              Error ID: {error.response.data.errorId}
-            </div>
-          )}
 
           {/* Actions */}
           <div className="flex gap-3 justify-end">
