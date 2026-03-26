@@ -1,13 +1,15 @@
-import { X, Pin, Search, MoreVertical } from "lucide-react";
+import { X, Pin, Search, MoreVertical, Download } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useState } from "react";
 import ThemeToggle from "./ThemeToggle";
+import ExportChatModal from "./ExportChatModal";
 
 const ChatHeader = ({ onSearchClick, onPinnedClick }) => {
   const { selectedUser, setSelectedUser, userStatus } = useChatStore();
   const { onlineUsers } = useAuthStore();
   const [showMenu, setShowMenu] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const status = userStatus[selectedUser._id];
   const isOnline = onlineUsers.includes(selectedUser._id);
@@ -81,6 +83,15 @@ const ChatHeader = ({ onSearchClick, onPinnedClick }) => {
                     setShowMenu(false);
                   }}>Search</a>
                 </li>
+                <li>
+                  <a onClick={() => {
+                    setShowExportModal(true);
+                    setShowMenu(false);
+                  }}>
+                    <Download size={16} className="mr-2" />
+                    Export Chat
+                  </a>
+                </li>
                 <li><a>View Profile</a></li>
                 <li><a>Info</a></li>
               </ul>
@@ -93,6 +104,13 @@ const ChatHeader = ({ onSearchClick, onPinnedClick }) => {
           </button>
         </div>
       </div>
+
+      {showExportModal && (
+        <ExportChatModal
+          user={selectedUser}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
     </div>
   );
 };

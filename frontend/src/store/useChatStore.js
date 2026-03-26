@@ -2,6 +2,7 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
+import { useErrorStore } from "./useErrorStore";
 
 export const useChatStore = create((set, get) => ({
   messages: [],
@@ -26,7 +27,7 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get("/messages/users");
       set({ users: res.data });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to load users");
+      useErrorStore.getState().handleApiError(error, "load users");
     } finally {
       set({ isUsersLoading: false });
     }
@@ -42,7 +43,7 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get(`/messages/search?query=${encodeURIComponent(query)}`);
       set({ searchResults: res.data });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Search failed");
+      useErrorStore.getState().handleApiError(error, "search users");
     }
   },
 
@@ -58,7 +59,7 @@ export const useChatStore = create((set, get) => ({
         console.error("Failed to mark messages as read:", error);
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to load messages");
+      useErrorStore.getState().handleApiError(error, "load messages");
     } finally {
       set({ isMessagesLoading: false });
     }
@@ -74,7 +75,7 @@ export const useChatStore = create((set, get) => ({
       });
       set({ messages: [...messages, res.data], replyingToMessage: null });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to send message");
+      useErrorStore.getState().handleApiError(error, "send message");
     }
   },
 
@@ -88,7 +89,7 @@ export const useChatStore = create((set, get) => ({
         ),
       });
     } catch (error) {
-      toast.error("Failed to add reaction");
+      useErrorStore.getState().handleApiError(error, "add reaction");
     }
   },
 
@@ -101,7 +102,7 @@ export const useChatStore = create((set, get) => ({
         ),
       });
     } catch (error) {
-      toast.error("Failed to remove reaction");
+      useErrorStore.getState().handleApiError(error, "remove reaction");
     }
   },
 
@@ -117,7 +118,7 @@ export const useChatStore = create((set, get) => ({
       });
       toast.success("Message edited");
     } catch (error) {
-      toast.error("Failed to edit message");
+      useErrorStore.getState().handleApiError(error, "edit message");
     }
   },
 
@@ -134,7 +135,7 @@ export const useChatStore = create((set, get) => ({
       });
       toast.success("Message deleted");
     } catch (error) {
-      toast.error("Failed to delete message");
+      useErrorStore.getState().handleApiError(error, "delete message");
     }
   },
 
@@ -148,7 +149,7 @@ export const useChatStore = create((set, get) => ({
         ),
       });
     } catch (error) {
-      toast.error("Failed to pin message");
+      useErrorStore.getState().handleApiError(error, "pin message");
     }
   },
 
@@ -158,7 +159,7 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get(`/messages/pinned/${userId}`);
       set({ pinnedMessages: res.data });
     } catch (error) {
-      toast.error("Failed to load pinned messages");
+      useErrorStore.getState().handleApiError(error, "load pinned messages");
     }
   },
 
@@ -170,7 +171,7 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get(`/messages/search/${userId}?${params}`);
       set({ searchMessageResults: res.data });
     } catch (error) {
-      toast.error("Failed to search messages");
+      useErrorStore.getState().handleApiError(error, "search messages");
     }
   },
 
@@ -181,7 +182,7 @@ export const useChatStore = create((set, get) => ({
       toast.success("Message forwarded");
       return res.data;
     } catch (error) {
-      toast.error("Failed to forward message");
+      useErrorStore.getState().handleApiError(error, "forward message");
     }
   },
 
@@ -191,7 +192,7 @@ export const useChatStore = create((set, get) => ({
       await axiosInstance.patch(`/messages/archive/${userId}`);
       toast.success("Chat archived");
     } catch (error) {
-      toast.error("Failed to archive chat");
+      useErrorStore.getState().handleApiError(error, "archive chat");
     }
   },
 
@@ -199,7 +200,7 @@ export const useChatStore = create((set, get) => ({
     try {
       await axiosInstance.patch(`/messages/pin/${userId}`);
     } catch (error) {
-      toast.error("Failed to pin chat");
+      useErrorStore.getState().handleApiError(error, "pin chat");
     }
   },
 
@@ -207,7 +208,7 @@ export const useChatStore = create((set, get) => ({
     try {
       await axiosInstance.patch(`/messages/mute/${userId}`);
     } catch (error) {
-      toast.error("Failed to mute chat");
+      useErrorStore.getState().handleApiError(error, "mute chat");
     }
   },
 
@@ -217,7 +218,7 @@ export const useChatStore = create((set, get) => ({
       set({ messages: [] });
       toast.success("Chat history cleared");
     } catch (error) {
-      toast.error("Failed to clear chat");
+      useErrorStore.getState().handleApiError(error, "clear chat");
     }
   },
 
@@ -366,5 +367,36 @@ export const useChatStore = create((set, get) => ({
 
   clearBulkSelect: () => {
     set({ selectedMessagesForBulk: [] });
+  },
+
+  // Export chat history
+  exportChat: async (userId, format = 'json', includeDeleted = false) => {
+    try {
+      const response = await axiosInstance.get(`/messages/export/${userId}`, {
+        params: { format, includeDeleted },
+        responseType: format === 'json' ? 'json' : 'blob',
+      });
+
+      if (format === 'json') {
+        return response.data;
+      } else {
+        // For text/csv formats, trigger download
+        const blob = new Blob([response.data], {
+          type: format === 'text' ? 'text/plain' : 'text/csv'
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat-export.${format === 'text' ? 'txt' : 'csv'}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return true;
+      }
+    } catch (error) {
+      useErrorStore.getState().handleApiError(error, "export chat");
+      return false;
+    }
   },
 }));
