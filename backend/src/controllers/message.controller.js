@@ -885,8 +885,9 @@ function formatChatAsCSV(data) {
     const isEdited = msg.isEdited ? 'Yes' : 'No';
     const isDeleted = msg.isDeleted ? 'Yes' : 'No';
     const isPinned = msg.isPinned ? 'Yes' : 'No';
-    const reactions = msg.reactions ? Object.entries(msg.reactions).map(([emoji, users]) => `${emoji}(${users.length})`).join('; ') : '';
-    const replyTo = msg.replyTo ? `"${msg.replyTo.text?.replace(/"/g, '""") || ''}"` : '';
+    const reactions = msg.reactions ? Object.entries(msg.reactions).map
+    (([emoji, users]) => `${emoji}(${users.length})`).join('; ') : '';
+    const replyTo = msg.replyTo ? `"${msg.replyTo.text?.replace(/"/g, '""') || ''}"`:'';
     const forwardedFrom = msg.forwardedFrom ? msg.forwardedFrom.sender || '' : '';
 
     csv += `${timestamp},${sender},${text},${image},${file},${isEdited},${isDeleted},${isPinned},"${reactions}",${replyTo},${forwardedFrom}\n`;
